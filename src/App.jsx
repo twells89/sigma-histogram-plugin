@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState } from 'react'
+import React, { useMemo, useEffect, useState, useRef, useCallback } from 'react'
 import { useConfig, usePaginatedElementData, useElementColumns } from '@sigmacomputing/plugin'
 import Histogram from './components/Histogram'
 import { calculateStats, generateBins } from './utils/statistics'
@@ -7,53 +7,69 @@ function App() {
   const config = useConfig()
   const sourceElementId = config?.source
   
-  // usePaginatedElementData returns [data, fetchMore]
-  const result = usePaginatedElementData(sourceElementId)
-  
-  // Debug what we're getting
-  console.log('=== PAGINATED DATA DEBUG ===')
-  console.log('result:', result)
-  console.log('result type:', typeof result)
-  console.log('is array:', Array.isArray(result))
-  
-  const sigmaData = Array.isArray(result) ? result[0] : result
-  const fetchMore = Array.isArray(result) ? result[1] : null
-  
-  console.log('sigmaData:', sigmaData)
-  console.log('fetchMore:', fetchMore)
-  console.log('fetchMore type:', typeof fetchMore)
-  
+  const [sigmaData, fetchMore] = usePaginatedElementData(sourceElementId)
   const columns = useElementColumns(sourceElementId)
   
   const [isLoading, setIsLoading] = useState(false)
-  const [lastCount, setLastCount] = useState(0)
+  const [fetchCount, setFetchCount] = useState(0)
+  const lastCountRef = useRef(0)
 
   const valueColumnId = config?.valueColumn
 
+  const currentRowCount = useMemo(() => {
+    if (!sigmaData || !valueColumnId) return 0
+    const columnData = sigmaData[valueColumnId]
+    return Array.isArray(columnData) ? columnData.length : 0
+  }, [sigmaData, valueColumnId])
+
+  // Manual fetch more handler
+  const handleFetchMore = useCallback(() => {
+    if (fetchMore) {
+      console.log('Manual fetch more triggered')
+      setIsLoading(true)
+      setFetchCount(c => c + 1)
+      fetchMore()
+    }
+  }, [fetchMore])
+
   // Auto-fetch more data when available
   useEffect(() => {
-    if (sigmaData && valueColumnId) {
-      const columnData = sigmaData[valueColumnId]
-      if (columnData && Array.isArray(columnData)) {
-        const currentCount = columnData.length
-        console.log('Current row count:', currentCount, 'Last count:', lastCount)
-        
-        if (currentCount > lastCount) {
-          setLastCount(currentCount)
-          
-          // If we got exactly 25000 (or multiple), there's likely more
-          if (currentCount % 25000 === 0 && fetchMore) {
-            console.log('Fetching more data...')
-            setIsLoading(true)
-            fetchMore()
-          } else {
-            console.log('No more data to fetch or fetchMore not available')
-            setIsLoading(false)
-          }
-        }
+    if (!sigmaData || !valueColumnId || !fetchMore) return
+    
+    const columnData = sigmaData[valueColumnId]
+    if (!columnData || !Array.isArray(columnData)) return
+    
+    const currentCount = columnData.length
+    const lastCount = lastCountRef.current
+    
+    console.log(`[Pagination] Current: ${currentCount}, Last: ${lastCount}, Fetch #${fetchCount}`)
+    
+    if (currentCount > lastCount) {
+      const newRows = currentCount - lastCount
+      lastCountRef.current = currentCount
+      
+      console.log(`[Pagination] Received ${newRows} new rows`)
+      
+      // If we received a large chunk, fetch more
+      if (newRows >= 20000) {
+        console.log('[Pagination] Large chunk detected, fetching more...')
+        setIsLoading(true)
+        setFetchCount(c => c + 1)
+        // Use setTimeout to avoid potential race conditions
+        setTimeout(() => {
+          console.log('[Pagination] Calling fetchMore()')
+          fetchMore()
+        }, 100)
+      } else {
+        console.log('[Pagination] Small chunk, assuming complete')
+        setIsLoading(false)
       }
+    } else if (currentCount === lastCount && isLoading) {
+      // No new data but we were loading - might be done
+      console.log('[Pagination] No new data received, stopping')
+      setIsLoading(false)
     }
-  }, [sigmaData, valueColumnId, fetchMore, lastCount])
+  }, [sigmaData, valueColumnId, fetchMore, fetchCount, isLoading])
 
   const binMethod = config?.binMethod || 'Auto (Sturges)'
   const binCount = config?.binCount || '10'
@@ -133,21 +149,40 @@ function App() {
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-      {isLoading && (
-        <div style={{
-          position: 'absolute',
-          top: 8,
-          right: 8,
-          background: 'rgba(59, 130, 246, 0.9)',
-          color: 'white',
-          padding: '4px 12px',
-          borderRadius: 4,
-          fontSize: 12,
-          zIndex: 100
-        }}>
-          Loading... ({lastCount.toLocaleString()} rows)
-        </div>
-      )}
+      <div style={{
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        display: 'flex',
+        gap: 8,
+        zIndex: 100
+      }}>
+        <button 
+          onClick={handleFetchMore}
+          style={{
+            background: '#3b82f6',
+            color: 'white',
+            border: 'none',
+            padding: '4px 12px',
+            borderRadius: 4,
+            fontSize: 12,
+            cursor: 'pointer'
+          }}
+        >
+          Fetch More ({currentRowCount.toLocaleString()} rows)
+        </button>
+        {isLoading && (
+          <div style={{
+            background: 'rgba(59, 130, 246, 0.9)',
+            color: 'white',
+            padding: '4px 12px',
+            borderRadius: 4,
+            fontSize: 12,
+          }}>
+            Loading...
+          </div>
+        )}
+      </div>
       <Histogram
         bins={bins}
         stats={stats}
