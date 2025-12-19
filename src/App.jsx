@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState } from 'react'
+import React, { useMemo } from 'react'
 import { useConfig, useElementData, useElementColumns } from '@sigmacomputing/plugin'
 import Histogram from './components/Histogram'
 import { calculateStats, generateBins } from './utils/statistics'
@@ -7,35 +7,11 @@ function App() {
   const config = useConfig()
   const sourceElementId = config?.source
   
-  const [sigmaData, fetchMore] = useElementData(sourceElementId)
+  // useElementData returns just the data object, not an array
+  const sigmaData = useElementData(sourceElementId)
   const columns = useElementColumns(sourceElementId)
-  
-  const [isLoading, setIsLoading] = useState(false)
-  const [dataCount, setDataCount] = useState(0)
 
   const valueColumnId = config?.valueColumn
-
-  useEffect(() => {
-    if (sigmaData && valueColumnId) {
-      const columnData = sigmaData[valueColumnId]
-      if (columnData && Array.isArray(columnData)) {
-        const newCount = columnData.length
-        
-        if (newCount > dataCount) {
-          setDataCount(newCount)
-          
-          if (newCount % 25000 === 0 && fetchMore) {
-            setIsLoading(true)
-            fetchMore()
-          } else {
-            setIsLoading(false)
-          }
-        } else {
-          setIsLoading(false)
-        }
-      }
-    }
-  }, [sigmaData, valueColumnId, dataCount, fetchMore])
 
   const binMethod = config?.binMethod || 'Auto (Sturges)'
   const binCount = config?.binCount || '10'
@@ -114,34 +90,27 @@ function App() {
   }
 
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-      {isLoading && (
-        <div className="loading-indicator">
-          Loading more data... ({dataCount.toLocaleString()} rows)
-        </div>
-      )}
-      <Histogram
-        bins={bins}
-        stats={stats}
-        chartType={chartType}
-        colors={colors}
-        xAxisFormat={xAxisFormat}
-        numberFormat="Auto"
-        rotateLabels={false}
-        showBinRangeInTooltip={true}
-        showGridlines={showGridlines}
-        barPadding={barPadding}
-        showMean={showMean}
-        showMedian={showMedian}
-        showStdDev={showStdDev}
-        showNormalCurve={showNormalCurve}
-        showStats={showStats}
-        chartTitle={chartTitle || `Distribution of ${columnName}`}
-        xAxisLabel={xAxisLabel || columnName}
-        yAxisLabel={yAxisLabel}
-        showBarLabels={showBarLabels}
-      />
-    </div>
+    <Histogram
+      bins={bins}
+      stats={stats}
+      chartType={chartType}
+      colors={colors}
+      xAxisFormat={xAxisFormat}
+      numberFormat="Auto"
+      rotateLabels={false}
+      showBinRangeInTooltip={true}
+      showGridlines={showGridlines}
+      barPadding={barPadding}
+      showMean={showMean}
+      showMedian={showMedian}
+      showStdDev={showStdDev}
+      showNormalCurve={showNormalCurve}
+      showStats={showStats}
+      chartTitle={chartTitle || `Distribution of ${columnName}`}
+      xAxisLabel={xAxisLabel || columnName}
+      yAxisLabel={yAxisLabel}
+      showBarLabels={showBarLabels}
+    />
   )
 }
 
