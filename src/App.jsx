@@ -5,29 +5,32 @@ import { calculateStats, generateBins } from './utils/statistics'
 
 function App() {
   const config = useConfig()
-  const sigmaData = useElementData('source')
-  const columns = useElementColumns('source')
+  
+  // Get the actual element ID from config, then use that for data
+  const sourceElementId = config?.source
+  const sigmaData = useElementData(sourceElementId)
+  const columns = useElementColumns(sourceElementId)
 
-  // DEBUG - log everything
+  // DEBUG
   console.log('=== PLUGIN DEBUG ===')
-  console.log('config:', JSON.stringify(config, null, 2))
+  console.log('config:', config)
+  console.log('sourceElementId:', sourceElementId)
   console.log('sigmaData:', sigmaData)
+  console.log('sigmaData keys:', Object.keys(sigmaData || {}))
   console.log('columns:', columns)
 
   const valueColumnId = config?.valueColumn
   console.log('valueColumnId:', valueColumnId)
 
   if (sigmaData && valueColumnId) {
-    console.log('Column data:', sigmaData[valueColumnId])
+    console.log('Column data for', valueColumnId, ':', sigmaData[valueColumnId])
   }
 
-  // Extract all config values
   const binMethod = config?.binMethod || 'Auto (Sturges)'
   const binCount = config?.binCount || '10'
   const binWidth = config?.binWidth || ''
   const chartType = config?.chartType || 'Frequency'
   const colorScheme = config?.colorScheme || 'Ocean Blue'
-  const customColor = config?.customColor
   const showGridlines = config?.showGridlines !== false
   const barGap = config?.barGap || 'Small'
   const showMean = config?.showMean || false
@@ -38,115 +41,70 @@ function App() {
   const chartTitle = config?.chartTitle || ''
   const xAxisLabel = config?.xAxisLabel || ''
   const yAxisLabel = config?.yAxisLabel || ''
-  const xAxisFormat = config?.xAxisFormat || 'Range (10–20)'
-  const numberFormat = config?.numberFormat || 'Auto'
-  const rotateLabels = config?.rotateLabels || false
-  const showBinRangeInTooltip = config?.showBinRangeInTooltip !== false
+  const xAxisFormat = config?.xAxisFormat || 'Range'
   const showBarLabels = config?.showBarLabels || false
 
-  // Process data
   const processedData = useMemo(() => {
-    console.log('Processing data...')
-    if (!sigmaData) {
-      console.log('No sigmaData')
-      return null
-    }
-    if (!valueColumnId) {
-      console.log('No valueColumnId')
-      return null
-    }
-
+    if (!sigmaData || !valueColumnId) return null
+    
     const columnData = sigmaData[valueColumnId]
-    console.log('Raw column data:', columnData)
-    console.log('Type:', typeof columnData)
-    console.log('Is array:', Array.isArray(columnData))
-
-    if (!columnData) {
-      console.log('Column data is null/undefined')
-      return null
-    }
-
-    if (!Array.isArray(columnData)) {
-      console.log('Column data is not an array')
-      return null
-    }
-
-    console.log('First 5 values:', columnData.slice(0, 5))
+    console.log('Processing columnData:', columnData)
+    
+    if (!columnData || !Array.isArray(columnData)) return null
 
     const numericData = columnData
       .filter(val => val !== null && val !== undefined && !isNaN(Number(val)))
       .map(val => Number(val))
 
     console.log('Numeric data count:', numericData.length)
-    console.log('First 5 numeric:', numericData.slice(0, 5))
-
-    if (numericData.length === 0) {
-      console.log('No numeric data after filtering')
-      return null
-    }
-
-    return numericData
+    return numericData.length > 0 ? numericData : null
   }, [sigmaData, valueColumnId])
 
-  // Calculate statistics
   const stats = useMemo(() => {
     if (!processedData) return null
     return calculateStats(processedData)
   }, [processedData])
 
-  // Generate histogram bins
   const bins = useMemo(() => {
     if (!processedData) return []
     return generateBins(processedData, { binMethod, binCount, binWidth })
   }, [processedData, binMethod, binCount, binWidth])
 
-  // Get column name
   const columnName = useMemo(() => {
     if (!columns || !valueColumnId) return 'Value'
     const col = columns[valueColumnId]
     return col?.name || 'Value'
   }, [columns, valueColumnId])
 
-  // Color schemes
   const colorSchemes = {
     'Ocean Blue': { primary: '#3b82f6', gradient: ['#60a5fa', '#2563eb'] },
     'Forest Green': { primary: '#10b981', gradient: ['#34d399', '#059669'] },
     'Sunset Orange': { primary: '#f59e0b', gradient: ['#fbbf24', '#d97706'] },
     'Purple Haze': { primary: '#8b5cf6', gradient: ['#a78bfa', '#7c3aed'] },
     'Grayscale': { primary: '#64748b', gradient: ['#94a3b8', '#475569'] },
-    'Custom': { primary: customColor || '#3b82f6', gradient: [customColor || '#3b82f6', customColor || '#3b82f6'] }
   }
   const colors = colorSchemes[colorScheme] || colorSchemes['Ocean Blue']
-
   const barGapMap = { 'None': 0, 'Small': 1, 'Medium': 2, 'Large': 4 }
   const barPadding = barGapMap[barGap] ?? 1
 
-  // Empty state - no data source configured
-  if (!valueColumnId) {
+  if (!sourceElementId || !valueColumnId) {
     return (
       <div className="empty-state">
-        <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M3 3v18h18" />
-          <rect x="7" y="10" width="3" height="8" rx="0.5" />
-          <rect x="12" y="6" width="3" height="12" rx="0.5" />
-          <rect x="17" y="13" width="3" height="5" rx="0.5" />
-        </svg>
         <h3 className="empty-state-title">Configure Data Source</h3>
-        <p className="empty-state-message">Select a data source and a numeric column to visualize the distribution.</p>
+        <p className="empty-state-message">Select a data source and numeric column.</p>
       </div>
     )
   }
 
-  // Empty state - no data available
   if (!processedData || processedData.length === 0) {
     return (
       <div className="empty-state">
-        <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M12 8v4M12 16h.01" />
-        </svg>
         <h3 className="empty-state-title">No Data Available</h3>
-        <p className="empty-state-message">The selected column doesn't contain any numeric values to display.</p>
+        <p className="empty-state-message">
+          Source: {sourceElementId}<br/>
+          Column: {valueColumnId}<br/>
+          Data keys: {Object.keys(sigmaData || {}).join(', ') || 'none'}
+        </p>
       </div>
     )
   }
@@ -158,9 +116,9 @@ function App() {
       chartType={chartType}
       colors={colors}
       xAxisFormat={xAxisFormat}
-      numberFormat={numberFormat}
-      rotateLabels={rotateLabels}
-      showBinRangeInTooltip={showBinRangeInTooltip}
+      numberFormat="Auto"
+      rotateLabels={false}
+      showBinRangeInTooltip={true}
       showGridlines={showGridlines}
       barPadding={barPadding}
       showMean={showMean}
