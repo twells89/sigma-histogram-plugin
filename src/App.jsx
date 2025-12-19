@@ -8,7 +8,21 @@ function App() {
   const sourceElementId = config?.source
   
   // usePaginatedElementData returns [data, fetchMore]
-  const [sigmaData, fetchMore] = usePaginatedElementData(sourceElementId)
+  const result = usePaginatedElementData(sourceElementId)
+  
+  // Debug what we're getting
+  console.log('=== PAGINATED DATA DEBUG ===')
+  console.log('result:', result)
+  console.log('result type:', typeof result)
+  console.log('is array:', Array.isArray(result))
+  
+  const sigmaData = Array.isArray(result) ? result[0] : result
+  const fetchMore = Array.isArray(result) ? result[1] : null
+  
+  console.log('sigmaData:', sigmaData)
+  console.log('fetchMore:', fetchMore)
+  console.log('fetchMore type:', typeof fetchMore)
+  
   const columns = useElementColumns(sourceElementId)
   
   const [isLoading, setIsLoading] = useState(false)
@@ -18,20 +32,22 @@ function App() {
 
   // Auto-fetch more data when available
   useEffect(() => {
-    if (sigmaData && valueColumnId && fetchMore) {
+    if (sigmaData && valueColumnId) {
       const columnData = sigmaData[valueColumnId]
       if (columnData && Array.isArray(columnData)) {
         const currentCount = columnData.length
+        console.log('Current row count:', currentCount, 'Last count:', lastCount)
         
-        // If we got new data and it's a multiple of 25000, there's likely more
         if (currentCount > lastCount) {
           setLastCount(currentCount)
           
-          if (currentCount % 25000 === 0) {
+          // If we got exactly 25000 (or multiple), there's likely more
+          if (currentCount % 25000 === 0 && fetchMore) {
+            console.log('Fetching more data...')
             setIsLoading(true)
-            // Small delay to prevent overwhelming
-            setTimeout(() => fetchMore(), 100)
+            fetchMore()
           } else {
+            console.log('No more data to fetch or fetchMore not available')
             setIsLoading(false)
           }
         }
