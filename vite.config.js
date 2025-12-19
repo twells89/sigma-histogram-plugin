@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  base: '/sigma-histogram-plugin/',
   server: {
     port: 3000,
     host: true
