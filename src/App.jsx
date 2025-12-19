@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react'
-import { useConfig, useElementData, useElementColumns } from '@sigmacomputing/plugin'
+import React, { useMemo, useEffect, useState } from 'react'
+import { useConfig, usePaginatedElementData, useElementColumns } from '@sigmacomputing/plugin'
 import Histogram from './components/Histogram'
 import { calculateStats, generateBins } from './utils/statistics'
 
@@ -7,11 +7,37 @@ function App() {
   const config = useConfig()
   const sourceElementId = config?.source
   
-  // useElementData returns just the data object, not an array
-  const sigmaData = useElementData(sourceElementId)
+  // usePaginatedElementData returns [data, fetchMore]
+  const [sigmaData, fetchMore] = usePaginatedElementData(sourceElementId)
   const columns = useElementColumns(sourceElementId)
+  
+  const [isLoading, setIsLoading] = useState(false)
+  const [lastCount, setLastCount] = useState(0)
 
   const valueColumnId = config?.valueColumn
+
+  // Auto-fetch more data when available
+  useEffect(() => {
+    if (sigmaData && valueColumnId && fetchMore) {
+      const columnData = sigmaData[valueColumnId]
+      if (columnData && Array.isArray(columnData)) {
+        const currentCount = columnData.length
+        
+        // If we got new data and it's a multiple of 25000, there's likely more
+        if (currentCount > lastCount) {
+          setLastCount(currentCount)
+          
+          if (currentCount % 25000 === 0) {
+            setIsLoading(true)
+            // Small delay to prevent overwhelming
+            setTimeout(() => fetchMore(), 100)
+          } else {
+            setIsLoading(false)
+          }
+        }
+      }
+    }
+  }, [sigmaData, valueColumnId, fetchMore, lastCount])
 
   const binMethod = config?.binMethod || 'Auto (Sturges)'
   const binCount = config?.binCount || '10'
@@ -90,27 +116,44 @@ function App() {
   }
 
   return (
-    <Histogram
-      bins={bins}
-      stats={stats}
-      chartType={chartType}
-      colors={colors}
-      xAxisFormat={xAxisFormat}
-      numberFormat="Auto"
-      rotateLabels={false}
-      showBinRangeInTooltip={true}
-      showGridlines={showGridlines}
-      barPadding={barPadding}
-      showMean={showMean}
-      showMedian={showMedian}
-      showStdDev={showStdDev}
-      showNormalCurve={showNormalCurve}
-      showStats={showStats}
-      chartTitle={chartTitle || `Distribution of ${columnName}`}
-      xAxisLabel={xAxisLabel || columnName}
-      yAxisLabel={yAxisLabel}
-      showBarLabels={showBarLabels}
-    />
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      {isLoading && (
+        <div style={{
+          position: 'absolute',
+          top: 8,
+          right: 8,
+          background: 'rgba(59, 130, 246, 0.9)',
+          color: 'white',
+          padding: '4px 12px',
+          borderRadius: 4,
+          fontSize: 12,
+          zIndex: 100
+        }}>
+          Loading... ({lastCount.toLocaleString()} rows)
+        </div>
+      )}
+      <Histogram
+        bins={bins}
+        stats={stats}
+        chartType={chartType}
+        colors={colors}
+        xAxisFormat={xAxisFormat}
+        numberFormat="Auto"
+        rotateLabels={false}
+        showBinRangeInTooltip={true}
+        showGridlines={showGridlines}
+        barPadding={barPadding}
+        showMean={showMean}
+        showMedian={showMedian}
+        showStdDev={showStdDev}
+        showNormalCurve={showNormalCurve}
+        showStats={showStats}
+        chartTitle={chartTitle || `Distribution of ${columnName}`}
+        xAxisLabel={xAxisLabel || columnName}
+        yAxisLabel={yAxisLabel}
+        showBarLabels={showBarLabels}
+      />
+    </div>
   )
 }
 
