@@ -1,22 +1,30 @@
-import React, { useState, useEffect, useMemo } from 'react'
-import { client, useConfig, useElementData, useElementColumns } from '@sigmacomputing/plugin'
+import React, { useMemo } from 'react'
+import { useConfig, useElementData, useElementColumns } from '@sigmacomputing/plugin'
 import Histogram from './components/Histogram'
 import { calculateStats, generateBins } from './utils/statistics'
 
 function App() {
   const config = useConfig()
-  const [isLoading, setIsLoading] = useState(true)
-  
-  // Get data from Sigma
   const sigmaData = useElementData('source')
   const columns = useElementColumns('source')
-  
-  // Extract configuration values
+
+  // DEBUG - log everything
+  console.log('=== PLUGIN DEBUG ===')
+  console.log('config:', JSON.stringify(config, null, 2))
+  console.log('sigmaData:', sigmaData)
+  console.log('columns:', columns)
+
   const valueColumnId = config?.valueColumn
+  console.log('valueColumnId:', valueColumnId)
+
+  if (sigmaData && valueColumnId) {
+    console.log('Column data:', sigmaData[valueColumnId])
+  }
+
+  // Extract all config values
   const binMethod = config?.binMethod || 'Auto (Sturges)'
   const binCount = config?.binCount || '10'
   const binWidth = config?.binWidth || ''
-  const binLabelFormat = config?.binLabelFormat || 'Range (10-20)'
   const chartType = config?.chartType || 'Frequency'
   const colorScheme = config?.colorScheme || 'Ocean Blue'
   const customColor = config?.customColor
@@ -38,22 +46,42 @@ function App() {
 
   // Process data
   const processedData = useMemo(() => {
-    if (!sigmaData || !valueColumnId) {
+    console.log('Processing data...')
+    if (!sigmaData) {
+      console.log('No sigmaData')
+      return null
+    }
+    if (!valueColumnId) {
+      console.log('No valueColumnId')
       return null
     }
 
-    // Get the column data
     const columnData = sigmaData[valueColumnId]
-    if (!columnData || !Array.isArray(columnData)) {
+    console.log('Raw column data:', columnData)
+    console.log('Type:', typeof columnData)
+    console.log('Is array:', Array.isArray(columnData))
+
+    if (!columnData) {
+      console.log('Column data is null/undefined')
       return null
     }
 
-    // Filter to valid numbers only
+    if (!Array.isArray(columnData)) {
+      console.log('Column data is not an array')
+      return null
+    }
+
+    console.log('First 5 values:', columnData.slice(0, 5))
+
     const numericData = columnData
       .filter(val => val !== null && val !== undefined && !isNaN(Number(val)))
       .map(val => Number(val))
 
+    console.log('Numeric data count:', numericData.length)
+    console.log('First 5 numeric:', numericData.slice(0, 5))
+
     if (numericData.length === 0) {
+      console.log('No numeric data after filtering')
       return null
     }
 
@@ -69,14 +97,10 @@ function App() {
   // Generate histogram bins
   const bins = useMemo(() => {
     if (!processedData) return []
-    return generateBins(processedData, {
-      binMethod,
-      binCount,
-      binWidth
-    })
+    return generateBins(processedData, { binMethod, binCount, binWidth })
   }, [processedData, binMethod, binCount, binWidth])
 
-  // Get column name for labels
+  // Get column name
   const columnName = useMemo(() => {
     if (!columns || !valueColumnId) return 'Value'
     const col = columns[valueColumnId]
@@ -92,32 +116,10 @@ function App() {
     'Grayscale': { primary: '#64748b', gradient: ['#94a3b8', '#475569'] },
     'Custom': { primary: customColor || '#3b82f6', gradient: [customColor || '#3b82f6', customColor || '#3b82f6'] }
   }
-
   const colors = colorSchemes[colorScheme] || colorSchemes['Ocean Blue']
 
-  // Bar gap mapping
-  const barGapMap = {
-    'None': 0,
-    'Small': 1,
-    'Medium': 2,
-    'Large': 4
-  }
+  const barGapMap = { 'None': 0, 'Small': 1, 'Medium': 2, 'Large': 4 }
   const barPadding = barGapMap[barGap] ?? 1
-
-  // Update loading state
-  useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 500)
-    return () => clearTimeout(timer)
-  }, [])
-
-  // Loading state
-  if (isLoading) {
-    return (
-      <div className="loading-state">
-        <div className="loading-spinner" />
-      </div>
-    )
-  }
 
   // Empty state - no data source configured
   if (!valueColumnId) {
@@ -130,9 +132,7 @@ function App() {
           <rect x="17" y="13" width="3" height="5" rx="0.5" />
         </svg>
         <h3 className="empty-state-title">Configure Data Source</h3>
-        <p className="empty-state-message">
-          Select a data source and a numeric column to visualize the distribution.
-        </p>
+        <p className="empty-state-message">Select a data source and a numeric column to visualize the distribution.</p>
       </div>
     )
   }
@@ -146,9 +146,7 @@ function App() {
           <path d="M12 8v4M12 16h.01" />
         </svg>
         <h3 className="empty-state-title">No Data Available</h3>
-        <p className="empty-state-message">
-          The selected column doesn't contain any numeric values to display.
-        </p>
+        <p className="empty-state-message">The selected column doesn't contain any numeric values to display.</p>
       </div>
     )
   }
@@ -159,7 +157,6 @@ function App() {
       stats={stats}
       chartType={chartType}
       colors={colors}
-      binLabelFormat={binLabelFormat}
       xAxisFormat={xAxisFormat}
       numberFormat={numberFormat}
       rotateLabels={rotateLabels}
