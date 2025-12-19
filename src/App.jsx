@@ -1,30 +1,41 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useEffect, useState } from 'react'
 import { useConfig, useElementData, useElementColumns } from '@sigmacomputing/plugin'
 import Histogram from './components/Histogram'
 import { calculateStats, generateBins } from './utils/statistics'
 
 function App() {
   const config = useConfig()
-  
-  // Get the actual element ID from config, then use that for data
   const sourceElementId = config?.source
-  const sigmaData = useElementData(sourceElementId)
+  
+  const [sigmaData, fetchMore] = useElementData(sourceElementId)
   const columns = useElementColumns(sourceElementId)
-
-  // DEBUG
-  console.log('=== PLUGIN DEBUG ===')
-  console.log('config:', config)
-  console.log('sourceElementId:', sourceElementId)
-  console.log('sigmaData:', sigmaData)
-  console.log('sigmaData keys:', Object.keys(sigmaData || {}))
-  console.log('columns:', columns)
+  
+  const [isLoading, setIsLoading] = useState(false)
+  const [dataCount, setDataCount] = useState(0)
 
   const valueColumnId = config?.valueColumn
-  console.log('valueColumnId:', valueColumnId)
 
-  if (sigmaData && valueColumnId) {
-    console.log('Column data for', valueColumnId, ':', sigmaData[valueColumnId])
-  }
+  useEffect(() => {
+    if (sigmaData && valueColumnId) {
+      const columnData = sigmaData[valueColumnId]
+      if (columnData && Array.isArray(columnData)) {
+        const newCount = columnData.length
+        
+        if (newCount > dataCount) {
+          setDataCount(newCount)
+          
+          if (newCount % 25000 === 0 && fetchMore) {
+            setIsLoading(true)
+            fetchMore()
+          } else {
+            setIsLoading(false)
+          }
+        } else {
+          setIsLoading(false)
+        }
+      }
+    }
+  }, [sigmaData, valueColumnId, dataCount, fetchMore])
 
   const binMethod = config?.binMethod || 'Auto (Sturges)'
   const binCount = config?.binCount || '10'
@@ -48,15 +59,12 @@ function App() {
     if (!sigmaData || !valueColumnId) return null
     
     const columnData = sigmaData[valueColumnId]
-    console.log('Processing columnData:', columnData)
-    
     if (!columnData || !Array.isArray(columnData)) return null
 
     const numericData = columnData
       .filter(val => val !== null && val !== undefined && !isNaN(Number(val)))
       .map(val => Number(val))
 
-    console.log('Numeric data count:', numericData.length)
     return numericData.length > 0 ? numericData : null
   }, [sigmaData, valueColumnId])
 
@@ -100,37 +108,40 @@ function App() {
     return (
       <div className="empty-state">
         <h3 className="empty-state-title">No Data Available</h3>
-        <p className="empty-state-message">
-          Source: {sourceElementId}<br/>
-          Column: {valueColumnId}<br/>
-          Data keys: {Object.keys(sigmaData || {}).join(', ') || 'none'}
-        </p>
+        <p className="empty-state-message">The selected column has no numeric values.</p>
       </div>
     )
   }
 
   return (
-    <Histogram
-      bins={bins}
-      stats={stats}
-      chartType={chartType}
-      colors={colors}
-      xAxisFormat={xAxisFormat}
-      numberFormat="Auto"
-      rotateLabels={false}
-      showBinRangeInTooltip={true}
-      showGridlines={showGridlines}
-      barPadding={barPadding}
-      showMean={showMean}
-      showMedian={showMedian}
-      showStdDev={showStdDev}
-      showNormalCurve={showNormalCurve}
-      showStats={showStats}
-      chartTitle={chartTitle || `Distribution of ${columnName}`}
-      xAxisLabel={xAxisLabel || columnName}
-      yAxisLabel={yAxisLabel}
-      showBarLabels={showBarLabels}
-    />
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      {isLoading && (
+        <div className="loading-indicator">
+          Loading more data... ({dataCount.toLocaleString()} rows)
+        </div>
+      )}
+      <Histogram
+        bins={bins}
+        stats={stats}
+        chartType={chartType}
+        colors={colors}
+        xAxisFormat={xAxisFormat}
+        numberFormat="Auto"
+        rotateLabels={false}
+        showBinRangeInTooltip={true}
+        showGridlines={showGridlines}
+        barPadding={barPadding}
+        showMean={showMean}
+        showMedian={showMedian}
+        showStdDev={showStdDev}
+        showNormalCurve={showNormalCurve}
+        showStats={showStats}
+        chartTitle={chartTitle || `Distribution of ${columnName}`}
+        xAxisLabel={xAxisLabel || columnName}
+        yAxisLabel={yAxisLabel}
+        showBarLabels={showBarLabels}
+      />
+    </div>
   )
 }
 

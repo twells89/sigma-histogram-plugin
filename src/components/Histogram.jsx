@@ -2,68 +2,35 @@ import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react'
 import * as d3 from 'd3'
 import { generateNormalCurve } from '../utils/statistics'
 
-/**
- * Format a number based on the selected format
- */
 function formatValue(value, format, decimals = 2) {
-  if (value === null || value === undefined || isNaN(value)) {
-    return '—'
-  }
-
+  if (value === null || value === undefined || isNaN(value)) return '—'
   switch (format) {
-    case 'Integer':
-      return Math.round(value).toLocaleString()
-    case '1 Decimal':
-      return value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-    case '2 Decimals':
-      return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    case 'Integer': return Math.round(value).toLocaleString()
+    case '1 Decimal': return value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+    case '2 Decimals': return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     case 'Currency ($)':
-      if (Math.abs(value) >= 1000000) {
-        return '$' + (value / 1000000).toFixed(1) + 'M'
-      }
-      if (Math.abs(value) >= 1000) {
-        return '$' + (value / 1000).toFixed(1) + 'K'
-      }
+      if (Math.abs(value) >= 1000000) return '$' + (value / 1000000).toFixed(1) + 'M'
+      if (Math.abs(value) >= 1000) return '$' + (value / 1000).toFixed(1) + 'K'
       return '$' + value.toFixed(2)
-    case 'Thousands (K)':
-      return (value / 1000).toFixed(1) + 'K'
-    case 'Millions (M)':
-      return (value / 1000000).toFixed(2) + 'M'
-    case 'Auto':
+    case 'Thousands (K)': return (value / 1000).toFixed(1) + 'K'
+    case 'Millions (M)': return (value / 1000000).toFixed(2) + 'M'
     default:
-      if (Math.abs(value) >= 1000000) {
-        return (value / 1000000).toFixed(1) + 'M'
-      }
-      if (Math.abs(value) >= 10000) {
-        return (value / 1000).toFixed(1) + 'K'
-      }
-      if (Number.isInteger(value) || Math.abs(value) >= 100) {
-        return Math.round(value).toLocaleString()
-      }
+      if (Math.abs(value) >= 1000000) return (value / 1000000).toFixed(1) + 'M'
+      if (Math.abs(value) >= 10000) return (value / 1000).toFixed(1) + 'K'
+      if (Number.isInteger(value) || Math.abs(value) >= 100) return Math.round(value).toLocaleString()
       return value.toFixed(decimals)
   }
 }
 
-/**
- * Get the X-axis tick label for a bin based on format
- * THIS SOLVES THE CUSTOMER'S PAIN POINT - shows actual values, not "bin 1, bin 2"
- */
 function getBinLabel(bin, format, numberFormat) {
   const x0 = formatValue(bin.x0, numberFormat, 1)
   const x1 = formatValue(bin.x1, numberFormat, 1)
   const midpoint = (bin.x0 + bin.x1) / 2
-
   switch (format) {
-    case 'Range (10–20)':
-      return x0 + '–' + x1
-    case 'Midpoint':
-      return formatValue(midpoint, numberFormat, 1)
-    case 'Lower Bound':
-      return x0
-    case 'Upper Bound':
-      return x1
-    default:
-      return x0 + '–' + x1
+    case 'Midpoint': return formatValue(midpoint, numberFormat, 1)
+    case 'Lower Bound': return x0
+    case 'Upper Bound': return x1
+    default: return x0 + '–' + x1
   }
 }
 
@@ -114,10 +81,16 @@ function Histogram({
     const resizeObserver = new ResizeObserver(entries => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect
-        setDimensions({ width, height })
+        if (width > 0 && height > 0) {
+          setDimensions({ width, height })
+        }
       }
     })
     resizeObserver.observe(container)
+    const rect = container.getBoundingClientRect()
+    if (rect.width > 0 && rect.height > 0) {
+      setDimensions({ width: rect.width, height: rect.height })
+    }
     return () => resizeObserver.disconnect()
   }, [])
 
@@ -134,7 +107,7 @@ function Histogram({
     const height = dimensions.height - margin.top - margin.bottom
     if (width <= 0 || height <= 0) return
 
-    const g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')')
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
 
     const xBand = d3.scaleBand().domain(bins.map((_, i) => i)).range([0, width]).padding(barPadding / 20)
     const xLinear = d3.scaleLinear().domain([bins[0].x0, bins[bins.length - 1].x1]).range([0, width])
@@ -167,11 +140,15 @@ function Histogram({
       .attr('class', 'histogram-bar')
       .attr('x', (d, i) => xBand(i)).attr('y', d => yScale(getBarValue(d)))
       .attr('width', xBand.bandwidth()).attr('height', d => height - yScale(getBarValue(d)))
-      .attr('fill', 'url(#' + gradientId + ')').attr('rx', 2)
+      .attr('fill', `url(#${gradientId})`).attr('rx', 2)
       .on('mouseenter', (event, d) => {
         const rect = event.target.getBoundingClientRect()
         const containerRect = containerRef.current.getBoundingClientRect()
-        setTooltip({ x: rect.left + rect.width / 2 - containerRect.left, y: rect.top - containerRect.top, data: d })
+        setTooltip({
+          x: rect.left + rect.width / 2 - containerRect.left,
+          y: rect.top - containerRect.top,
+          data: d
+        })
       })
       .on('mouseleave', () => setTooltip(null))
 
@@ -205,8 +182,7 @@ function Histogram({
         .text('Med = ' + fmt(stats.median))
     }
 
-    // X Axis - THE KEY FIX: show actual values, not "bin 1, bin 2"!
-    const xAxisGroup = g.append('g').attr('class', 'axis-x').attr('transform', 'translate(0,' + height + ')')
+    const xAxisGroup = g.append('g').attr('class', 'axis-x').attr('transform', `translate(0,${height})`)
     xAxisGroup.append('line').attr('x1', 0).attr('x2', width).attr('y1', 0).attr('y2', 0).attr('stroke', '#e2e8f0')
 
     bins.forEach((_, i) => {
@@ -224,7 +200,7 @@ function Histogram({
       .text(d => getBinLabel(d, xAxisFormat, numberFormat))
 
     if (rotateLabels) {
-      labels.attr('transform', (d, i) => 'rotate(-45, ' + (xBand(i) + xBand.bandwidth() / 2) + ', 14)').attr('dy', '0.35em')
+      labels.attr('transform', (d, i) => `rotate(-45, ${xBand(i) + xBand.bandwidth() / 2}, 14)`).attr('dy', '0.35em')
     }
 
     if (xAxisLabel) {
@@ -248,6 +224,23 @@ function Histogram({
 
   const showLegend = showMean || showMedian || showStdDev || (showNormalCurve && chartType === 'Frequency')
 
+  const getTooltipStyle = () => {
+    if (!tooltip || !containerRef.current) return {}
+    const containerWidth = dimensions.width
+    let left = tooltip.x
+    let transform = 'translateX(-50%)'
+    
+    if (tooltip.x > containerWidth - 100) {
+      transform = 'translateX(-100%)'
+      left = tooltip.x + 10
+    } else if (tooltip.x < 100) {
+      transform = 'translateX(0%)'
+      left = tooltip.x - 10
+    }
+    
+    return { left, top: tooltip.y - 10, transform }
+  }
+
   return (
     <div className="histogram-container">
       <div className="histogram-header">
@@ -255,17 +248,17 @@ function Histogram({
         {showStats && stats && (
           <div className="stats-panel">
             <div className="stat-item"><span className="stat-label">N</span><span className="stat-value">{stats.count.toLocaleString()}</span></div>
-            <div className="stat-item"><span className="stat-label">Mean</span><span className="stat-value mean">{fmt(stats.mean)}</span></div>
-            <div className="stat-item"><span className="stat-label">Median</span><span className="stat-value median">{fmt(stats.median)}</span></div>
-            <div className="stat-item"><span className="stat-label">Std Dev</span><span className="stat-value stddev">{fmt(stats.stdDev)}</span></div>
-            <div className="stat-item"><span className="stat-label">Range</span><span className="stat-value">{fmt(stats.min)} – {fmt(stats.max)}</span></div>
+            <div className="stat-item"><span className="stat-label">MEAN</span><span className="stat-value mean">{fmt(stats.mean)}</span></div>
+            <div className="stat-item"><span className="stat-label">MEDIAN</span><span className="stat-value median">{fmt(stats.median)}</span></div>
+            <div className="stat-item"><span className="stat-label">STD DEV</span><span className="stat-value stddev">{fmt(stats.stdDev)}</span></div>
+            <div className="stat-item"><span className="stat-label">RANGE</span><span className="stat-value">{fmt(stats.min)} – {fmt(stats.max)}</span></div>
           </div>
         )}
       </div>
       <div className="chart-wrapper" ref={containerRef}>
-        <svg ref={svgRef} className="chart-svg" />
+        <svg ref={svgRef} width={dimensions.width} height={dimensions.height} />
         {tooltip && (
-          <div className="tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
+          <div className="tooltip" style={getTooltipStyle()}>
             {showBinRangeInTooltip !== false && <div className="tooltip-title">{fmt(tooltip.data.x0)} – {fmt(tooltip.data.x1)}</div>}
             <div className="tooltip-row"><span className="tooltip-label">Count:</span><span className="tooltip-value">{tooltip.data.count.toLocaleString()}</span></div>
             <div className="tooltip-row"><span className="tooltip-label">Frequency:</span><span className="tooltip-value">{tooltip.data.relativeFrequency.toFixed(1)}%</span></div>
