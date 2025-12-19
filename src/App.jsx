@@ -12,6 +12,7 @@ function App() {
   
   const [isLoading, setIsLoading] = useState(true)
   const lastCountRef = useRef(0)
+  const fetchTimeoutRef = useRef(null)
 
   const valueColumnId = config?.valueColumn
 
@@ -25,6 +26,12 @@ function App() {
     const currentCount = columnData.length
     const lastCount = lastCountRef.current
     
+    // Clear any existing timeout
+    if (fetchTimeoutRef.current) {
+      clearTimeout(fetchTimeoutRef.current)
+      fetchTimeoutRef.current = null
+    }
+    
     if (currentCount > lastCount) {
       const newRows = currentCount - lastCount
       lastCountRef.current = currentCount
@@ -32,16 +39,29 @@ function App() {
       // If we received a large chunk (~25K), fetch more
       if (newRows >= 20000) {
         setIsLoading(true)
+        
+        // Set a timeout - if no new data in 3 seconds, assume we're done
+        fetchTimeoutRef.current = setTimeout(() => {
+          console.log('Fetch timeout - assuming complete at', currentCount, 'rows')
+          setIsLoading(false)
+        }, 3000)
+        
         setTimeout(() => fetchMore(), 50)
       } else {
         // Small chunk means we're done
         setIsLoading(false)
       }
-    } else if (isLoading && currentCount === lastCount && currentCount > 0) {
-      // No new data arrived, we're done
+    } else if (currentCount > 0 && lastCount > 0) {
+      // No new data, we're done
       setIsLoading(false)
     }
-  }, [sigmaData, valueColumnId, fetchMore, isLoading])
+    
+    return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current)
+      }
+    }
+  }, [sigmaData, valueColumnId, fetchMore])
 
   const binMethod = config?.binMethod || 'Auto (Sturges)'
   const binCount = config?.binCount || '10'
