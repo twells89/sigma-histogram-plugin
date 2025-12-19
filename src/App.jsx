@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState, useRef, useCallback } from 'react'
+import React, { useMemo, useEffect, useState, useRef } from 'react'
 import { useConfig, usePaginatedElementData, useElementColumns } from '@sigmacomputing/plugin'
 import Histogram from './components/Histogram'
 import { calculateStats, generateBins } from './utils/statistics'
@@ -10,29 +10,12 @@ function App() {
   const [sigmaData, fetchMore] = usePaginatedElementData(sourceElementId)
   const columns = useElementColumns(sourceElementId)
   
-  const [isLoading, setIsLoading] = useState(false)
-  const [fetchCount, setFetchCount] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
   const lastCountRef = useRef(0)
 
   const valueColumnId = config?.valueColumn
 
-  const currentRowCount = useMemo(() => {
-    if (!sigmaData || !valueColumnId) return 0
-    const columnData = sigmaData[valueColumnId]
-    return Array.isArray(columnData) ? columnData.length : 0
-  }, [sigmaData, valueColumnId])
-
-  // Manual fetch more handler
-  const handleFetchMore = useCallback(() => {
-    if (fetchMore) {
-      console.log('Manual fetch more triggered')
-      setIsLoading(true)
-      setFetchCount(c => c + 1)
-      fetchMore()
-    }
-  }, [fetchMore])
-
-  // Auto-fetch more data when available
+  // Auto-fetch all data
   useEffect(() => {
     if (!sigmaData || !valueColumnId || !fetchMore) return
     
@@ -42,34 +25,23 @@ function App() {
     const currentCount = columnData.length
     const lastCount = lastCountRef.current
     
-    console.log(`[Pagination] Current: ${currentCount}, Last: ${lastCount}, Fetch #${fetchCount}`)
-    
     if (currentCount > lastCount) {
       const newRows = currentCount - lastCount
       lastCountRef.current = currentCount
       
-      console.log(`[Pagination] Received ${newRows} new rows`)
-      
-      // If we received a large chunk, fetch more
+      // If we received a large chunk (~25K), fetch more
       if (newRows >= 20000) {
-        console.log('[Pagination] Large chunk detected, fetching more...')
         setIsLoading(true)
-        setFetchCount(c => c + 1)
-        // Use setTimeout to avoid potential race conditions
-        setTimeout(() => {
-          console.log('[Pagination] Calling fetchMore()')
-          fetchMore()
-        }, 100)
+        setTimeout(() => fetchMore(), 50)
       } else {
-        console.log('[Pagination] Small chunk, assuming complete')
+        // Small chunk means we're done
         setIsLoading(false)
       }
-    } else if (currentCount === lastCount && isLoading) {
-      // No new data but we were loading - might be done
-      console.log('[Pagination] No new data received, stopping')
+    } else if (isLoading && currentCount === lastCount && currentCount > 0) {
+      // No new data arrived, we're done
       setIsLoading(false)
     }
-  }, [sigmaData, valueColumnId, fetchMore, fetchCount, isLoading])
+  }, [sigmaData, valueColumnId, fetchMore, isLoading])
 
   const binMethod = config?.binMethod || 'Auto (Sturges)'
   const binCount = config?.binCount || '10'
@@ -141,48 +113,43 @@ function App() {
   if (!processedData || processedData.length === 0) {
     return (
       <div className="empty-state">
-        <h3 className="empty-state-title">No Data Available</h3>
-        <p className="empty-state-message">The selected column has no numeric values.</p>
+        <h3 className="empty-state-title">{isLoading ? 'Loading Data...' : 'No Data Available'}</h3>
+        <p className="empty-state-message">
+          {isLoading ? 'Fetching data from source...' : 'The selected column has no numeric values.'}
+        </p>
       </div>
     )
   }
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-      <div style={{
-        position: 'absolute',
-        top: 8,
-        right: 8,
-        display: 'flex',
-        gap: 8,
-        zIndex: 100
-      }}>
-        <button 
-          onClick={handleFetchMore}
-          style={{
-            background: '#3b82f6',
-            color: 'white',
-            border: 'none',
-            padding: '4px 12px',
-            borderRadius: 4,
-            fontSize: 12,
-            cursor: 'pointer'
-          }}
-        >
-          Fetch More ({currentRowCount.toLocaleString()} rows)
-        </button>
-        {isLoading && (
+      {isLoading && (
+        <div style={{
+          position: 'absolute',
+          top: 8,
+          right: 8,
+          background: 'rgba(59, 130, 246, 0.9)',
+          color: 'white',
+          padding: '4px 12px',
+          borderRadius: 4,
+          fontSize: 12,
+          zIndex: 100,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8
+        }}>
           <div style={{
-            background: 'rgba(59, 130, 246, 0.9)',
-            color: 'white',
-            padding: '4px 12px',
-            borderRadius: 4,
-            fontSize: 12,
-          }}>
-            Loading...
-          </div>
-        )}
-      </div>
+            width: 12,
+            height: 12,
+            border: '2px solid rgba(255,255,255,0.3)',
+            borderTopColor: 'white',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite'
+          }} />
+          Loading... {(processedData?.length || 0).toLocaleString()} rows
+        </div>
+      )}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       <Histogram
         bins={bins}
         stats={stats}
